@@ -163,6 +163,30 @@ let contractInstance;
 let tokenDecimals = 18;
 let tokenSymbol = '';
 
+// 安全的金额计算函数
+function calculateTokenAmount(amount, decimals) {
+    // 将金额转换为字符串并移除小数点
+    const amountStr = amount.toString();
+    const decimalIndex = amountStr.indexOf('.');
+
+    if (decimalIndex === -1) {
+        // 整数金额
+        return BigInt(amountStr + '0'.repeat(decimals));
+    } else {
+        const integerPart = amountStr.substring(0, decimalIndex);
+        let fractionalPart = amountStr.substring(decimalIndex + 1);
+
+        // 处理精度
+        if (fractionalPart.length > decimals) {
+            fractionalPart = fractionalPart.substring(0, decimals);
+        } else if (fractionalPart.length < decimals) {
+            fractionalPart = fractionalPart + '0'.repeat(decimals - fractionalPart.length);
+        }
+
+        return BigInt(integerPart + fractionalPart);
+    }
+}
+
 // 转换地址为bytes32格式
 function addressToBytes32(address) {
     if (address.startsWith('0x')) {
@@ -179,7 +203,7 @@ function addressToBytes32(address) {
 // 显示状态消息
 function showStatus(message, type = 'info') {
     const statusEl = document.getElementById('status');
-    statusEl.textContent = message;
+    statusEl.innerHTML = message;
     statusEl.className = 'status ' + type;
 }
 
@@ -347,8 +371,13 @@ async function sendBridgeTransaction() {
         // 检查余额
         const balance = await contractInstance.methods.balanceOf(accounts[0]).call();
         const formattedBalance = parseFloat(balance) / Math.pow(10, tokenDecimals);
-        const amountInWei = BigInt(Math.floor(amount * Math.pow(10, tokenDecimals)));
-        const minAmount = BigInt(Math.floor(amountInWei * 0.95)); // 5% 滑点
+
+        // 使用安全的金额计算函数
+        const amountInWei = calculateTokenAmount(amount, tokenDecimals);
+
+        // 计算最小接收金额 (95%)
+        const minAmountRatio = BigInt(95);
+        const minAmount = (amountInWei * minAmountRatio) / BigInt(100);
 
         if (BigInt(balance) < amountInWei) {
             showStatus(`余额不足: 需要 ${amount} ${tokenSymbol}, 当前余额 ${formattedBalance.toFixed(6)}`, 'error');
